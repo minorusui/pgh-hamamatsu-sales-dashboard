@@ -1,0 +1,1165 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PGハウス浜松 営業力分析ダッシュボード</title>
+<style>
+:root {
+  --surface-1: #fcfcfb;
+  --page: #f9f9f7;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --ink-muted: #898781;
+  --grid: #e1e0d9;
+  --baseline: #c3c2b7;
+  --border: rgba(11,11,11,0.10);
+  --s1: #2a78d6; /* blue */
+  --s2: #1baf7a; /* aqua */
+  --s3: #eda100; /* yellow */
+  --s4: #008300; /* green */
+  --s5: #4a3aa7; /* violet */
+  --s6: #e34948; /* red */
+  --seq-250: #86b6ef;
+  --seq-400: #3987e5;
+  --seq-550: #1c5cab;
+  --seq-700: #0d366b;
+  --good: #0ca30c;
+  --warn-bg: #fff7e6;
+  --warn-border: #eda100;
+  --critical: #d03b3b;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface-1: #1a1a19;
+    --page: #0d0d0d;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --ink-muted: #898781;
+    --grid: #2c2c2a;
+    --baseline: #383835;
+    --border: rgba(255,255,255,0.10);
+    --s1: #3987e5;
+    --s2: #199e70;
+    --s3: #c98500;
+    --s4: #008300;
+    --s5: #9085e9;
+    --s6: #e66767;
+    --seq-250: #6da7ec;
+    --seq-400: #3987e5;
+    --seq-550: #1c5cab;
+    --seq-700: #184f95;
+    --good: #0ca30c;
+    --warn-bg: #2b230e;
+    --warn-border: #c98500;
+    --critical: #e66767;
+  }
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Yu Gothic UI", sans-serif;
+  background: var(--page);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.wrap { max-width: 1180px; margin: 0 auto; padding: 24px 20px 80px; }
+header.app { margin-bottom: 20px; }
+header.app h1 { font-size: 20px; font-weight: 700; }
+header.app .sub { color: var(--ink-2); font-size: 13px; }
+
+/* drop zone */
+#dropzone {
+  border: 2px dashed var(--baseline);
+  border-radius: 12px;
+  background: var(--surface-1);
+  padding: 60px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+  margin: 24px 0;
+}
+#dropzone.dragover { border-color: var(--s1); background: rgba(42,120,214,0.06); }
+#dropzone .big { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+#dropzone .small { color: var(--ink-muted); font-size: 13px; }
+
+.banner {
+  border: 1px solid var(--warn-border);
+  background: var(--warn-bg);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin: 16px 0;
+  font-size: 13px;
+}
+.banner b { color: var(--ink); }
+.banner.info { border-color: var(--baseline); background: var(--surface-1); color: var(--ink-2); }
+
+/* filters */
+.filters {
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin: 16px 0 24px;
+  position: sticky; top: 0; z-index: 20;
+}
+.filters label { font-size: 12px; color: var(--ink-2); display: flex; align-items: center; gap: 6px; }
+.filters select {
+  font: inherit; font-size: 13px;
+  padding: 4px 8px;
+  border: 1px solid var(--baseline);
+  border-radius: 6px;
+  background: var(--surface-1);
+  color: var(--ink);
+}
+.filters .reload { margin-left: auto; }
+.filters button {
+  font: inherit; font-size: 12px;
+  padding: 5px 12px;
+  border: 1px solid var(--baseline);
+  border-radius: 6px;
+  background: var(--surface-1);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.filters button:hover { border-color: var(--s1); color: var(--s1); }
+
+section.card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+section.card h2 { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+section.card .desc { font-size: 12px; color: var(--ink-muted); margin-bottom: 14px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+@media (max-width: 900px) { .grid2, .grid3 { grid-template-columns: 1fr; } }
+
+/* KPI tiles */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.tile {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+.tile .label { font-size: 12px; color: var(--ink-2); }
+.tile .value { font-size: 26px; font-weight: 600; line-height: 1.3; }
+.tile .note { font-size: 11px; color: var(--ink-muted); }
+.tile .value.na { color: var(--ink-muted); font-size: 18px; }
+
+/* tables */
+table.data { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.data th, table.data td { padding: 6px 8px; text-align: right; white-space: nowrap; }
+table.data th:first-child, table.data td:first-child { text-align: left; }
+table.data thead th {
+  border-bottom: 1px solid var(--baseline);
+  color: var(--ink-2); font-weight: 600; font-size: 12px;
+  cursor: pointer; user-select: none;
+}
+table.data thead th.sorted { color: var(--s1); }
+table.data tbody tr { border-bottom: 1px solid var(--grid); }
+table.data tbody tr:hover { background: rgba(42,120,214,0.05); }
+table.data td.num { font-variant-numeric: tabular-nums; }
+table.data tr.total td { font-weight: 700; border-top: 1px solid var(--baseline); }
+.ratebar { display: inline-block; vertical-align: middle; width: 60px; height: 8px; background: var(--grid); border-radius: 4px; overflow: hidden; margin-left: 6px; }
+.ratebar > i { display: block; height: 100%; border-radius: 4px 0 0 4px; }
+.scrollx { overflow-x: auto; }
+
+/* funnel */
+.funnel { display: flex; align-items: flex-end; gap: 24px; padding: 8px 4px 0; flex-wrap: wrap; }
+.fstage { flex: 1; min-width: 110px; text-align: center; }
+.fstage .bar { border-radius: 4px 4px 0 0; margin: 0 auto; width: 100%; max-width: 120px; }
+.fstage .cnt { font-size: 20px; font-weight: 600; }
+.fstage .nm { font-size: 12px; color: var(--ink-2); }
+.farrow { align-self: center; text-align: center; color: var(--ink-2); font-size: 12px; min-width: 60px; }
+.farrow b { display: block; font-size: 14px; color: var(--ink); }
+
+svg text { font-family: inherit; }
+.chart-note { font-size: 11px; color: var(--ink-muted); margin-top: 8px; }
+.legend { display: flex; gap: 16px; font-size: 12px; color: var(--ink-2); margin-bottom: 8px; flex-wrap: wrap; }
+.legend .key { display: inline-flex; align-items: center; gap: 5px; }
+.legend .sw { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.legend .swline { width: 14px; height: 2px; display: inline-block; }
+
+#tooltip {
+  position: fixed; pointer-events: none; z-index: 100;
+  background: var(--ink); color: var(--page);
+  font-size: 12px; padding: 6px 10px; border-radius: 6px;
+  opacity: 0; transition: opacity .1s; max-width: 280px; white-space: pre-line;
+}
+@media (prefers-color-scheme: dark) { #tooltip { background: #f0efec; color: #0b0b0b; } }
+
+.defs { font-size: 12px; color: var(--ink-2); }
+.defs dt { font-weight: 600; margin-top: 8px; color: var(--ink); }
+footer { font-size: 11px; color: var(--ink-muted); margin-top: 30px; }
+#dash { display: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="app">
+  <h1>PGハウス浜松 営業力分析ダッシュボード</h1>
+  <div class="sub">PGクラウド顧客CSVを読み込むと、初回面談→第二面談→ベストプラン申込→契約の歩留りを担当者別・年次・月次で分析します。データはこのPC内でのみ処理され、外部送信されません。</div>
+</header>
+
+<div id="dropzone">
+  <div class="big">ここにPGクラウドの顧客CSVをドラッグ&ドロップ</div>
+  <div class="small">またはクリックしてファイルを選択（customers_～.csv / UTF-8）</div>
+  <input type="file" id="fileinput" accept=".csv" style="display:none">
+</div>
+
+<div id="banners"></div>
+
+<div id="dash">
+  <div class="filters">
+    <label>対象期間
+      <select id="f-period"></select>
+    </label>
+    <label>集計基準
+      <select id="f-mode">
+        <option value="jisseki">実績基準（期間内に発生した件数）</option>
+        <option value="cohort">コホート基準（期間内に初回面談した顧客を追跡）</option>
+      </select>
+    </label>
+    <label>担当者
+      <select id="f-tanto"></select>
+    </label>
+    <label>土地の有無
+      <select id="f-tochi">
+        <option value="">すべて</option>
+        <option value="有">有</option>
+        <option value="無">無</option>
+      </select>
+    </label>
+    <span class="reload"><button id="btn-reload">別のCSVを読み込む</button></span>
+  </div>
+
+  <div class="tiles" id="kpi-tiles"></div>
+
+  <section class="card">
+    <h2>全体ファネル（歩留り）</h2>
+    <div class="desc">初回面談を実施した顧客のうち、各ステージへ到達した人数と通過率。反響は参考（初回面談アポ率の分母）。</div>
+    <div class="funnel" id="funnel"></div>
+  </section>
+
+  <section class="card">
+    <h2>担当者別 歩留り一覧</h2>
+    <div class="desc">列見出しをクリックすると並べ替え。率はすべて「÷初回面談数」の累積歩留り。件数が少ない担当者（初回面談5件未満）の率は参考値。</div>
+    <div class="scrollx"><table class="data" id="tanto-table"></table></div>
+  </section>
+
+  <div class="grid2">
+    <section class="card">
+      <h2>年次推移（1〜12月）</h2>
+      <div class="desc" id="yearly-desc"></div>
+      <div id="yearly-chart"></div>
+      <div class="scrollx"><table class="data" id="yearly-table"></table></div>
+    </section>
+    <section class="card">
+      <h2>月次推移（直近24ヶ月）</h2>
+      <div class="desc" id="monthly-desc"></div>
+      <div id="monthly-count-chart"></div>
+      <div id="monthly-rate-chart" style="margin-top:16px"></div>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>仮説① リードタイム × 契約率</h2>
+    <div class="desc" id="h1-desc"></div>
+    <div id="h1-chart"></div>
+    <div class="chart-note" id="h1-note"></div>
+  </section>
+
+  <div class="grid2">
+    <section class="card">
+      <h2>仮説② ベストプラン申込率 × 契約率</h2>
+      <div class="desc" id="h2-desc"></div>
+      <div id="h2-chart"></div>
+      <div class="chart-note" id="h2-note"></div>
+    </section>
+    <section class="card">
+      <h2>仮説③ 予約反響の面談未実施率 × 契約率</h2>
+      <div class="desc">販促媒体名が「来場予約」「イベント予約」系で反響（名簿取得日）がある顧客のうち、初回面談日が未記入の割合。取りこぼし率が高い担当者ほど成果が低いかを検証。</div>
+      <div id="h3-chart"></div>
+      <div class="scrollx" style="margin-top:12px"><table class="data" id="h3-table"></table></div>
+    </section>
+  </div>
+
+  <div class="grid2">
+    <section class="card">
+      <h2>土地の有無 × 歩留り</h2>
+      <div class="desc">土地有客と土地無客の各ステージ通過率（÷初回面談数）の比較。</div>
+      <div id="tochi-chart"></div>
+      <div class="scrollx" style="margin-top:12px"><table class="data" id="tochi-table"></table></div>
+    </section>
+    <section class="card">
+      <h2>資金状況 × 歩留り</h2>
+      <div class="desc">初回面談実施者を予算・自己資金の帯で分け、歩留り率を比較。「0/未入力」はヒアリング未完了の可能性が高い層。</div>
+      <div id="money-tabs" style="margin-bottom:10px"></div>
+      <div id="money-chart"></div>
+      <div class="scrollx" style="margin-top:12px"><table class="data" id="money-table"></table></div>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>集計定義・データ品質</h2>
+    <dl class="defs" id="defs"></dl>
+  </section>
+
+  <footer>PGハウス浜松 営業力分析ダッシュボード — CSVはブラウザ内でのみ処理。集計基準日: <span id="today"></span></footer>
+</div>
+</div>
+<div id="tooltip"></div>
+
+<script>
+'use strict';
+/* ================= CSV parser (RFC4180対応) ================= */
+function parseCSV(text) {
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  const rows = []; let row = [], field = '', inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQ) {
+      if (c === '"') { if (text[i+1] === '"') { field += '"'; i++; } else inQ = false; }
+      else field += c;
+    } else {
+      if (c === '"') inQ = true;
+      else if (c === ',') { row.push(field); field = ''; }
+      else if (c === '\n') { row.push(field); field = ''; rows.push(row); row = []; }
+      else if (c === '\r') { /* skip */ }
+      else field += c;
+    }
+  }
+  if (field !== '' || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+
+/* ================= date / money ================= */
+function pDate(s) {
+  if (!s) return null;
+  s = s.trim();
+  let m = s.match(/^(\d{4})年(\d{1,2})月(\d{1,2})日/);
+  if (!m) m = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  if (!m) return null;
+  const d = new Date(+m[1], +m[2]-1, +m[3]);
+  return isNaN(d) ? null : d;
+}
+function pMoney(s) {
+  if (!s) return null;
+  s = s.trim().replace(/,/g, '').replace(/万円/, '');
+  if (s === '') return null;
+  const v = parseFloat(s);
+  return isNaN(v) ? null : v;
+}
+function days(a, b) { return Math.round((b - a) / 86400000); }
+function pct(a, b) { return b > 0 ? (a / b * 100) : null; }
+function fmtPct(v, dash) { return v == null ? (dash || '−') : v.toFixed(1) + '%'; }
+function median(xs) {
+  if (!xs.length) return null;
+  const s = [...xs].sort((a,b) => a-b), n = s.length;
+  return n % 2 ? s[(n-1)/2] : (s[n/2-1] + s[n/2]) / 2;
+}
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+/* ================= data model ================= */
+// 営業マンの固定表示順。これ以外の担当者はすべて「その他」に集約
+const SALES_ORDER = ['袴田', '平野', '森', '糸繰', '三村', '平澤'];
+const GROUPS = [...SALES_ORDER, 'その他'];
+function groupOf(tanto) {
+  const t = tanto.replace(/[\s　]/g, '');
+  for (const s of SALES_ORDER) if (t.startsWith(s)) return s;
+  return 'その他';
+}
+const COLS = {
+  name: '名前', tanto: '担当者', shop: '担当店舗',
+  hankyo: '反響(名簿取得日)', shokai: '初回面談日', daini: '第二面談',
+  best: 'ベストプラン申込', keiyaku: '契約',
+  baitai: '販促媒体名', tochi: '土地の有無',
+  yosan: '予算', tsuki: '月々支払予算(万円)', jiko: '自己資金(万円)',
+  mobile: '携帯電話', kotei: '固定電話', addr: '住所',
+};
+let ALL = [];        // 統合後の全顧客
+let META = { raw: 0, merged: 0, dup: 0, noKeiyakuCol: false };
+
+function loadRows(rows) {
+  const header = rows[0];
+  const idx = {};
+  for (const [k, name] of Object.entries(COLS)) {
+    idx[k] = header.indexOf(name);
+    if (idx[k] < 0 && ['name','tanto','shokai','daini','best','keiyaku'].includes(k)) {
+      throw new Error('必須列が見つかりません: ' + name);
+    }
+  }
+  const get = (r, k) => idx[k] >= 0 ? (r[idx[k]] || '').trim() : '';
+  const norm = s => s.replace(/[\s　]/g, '');
+
+  // 顧客オブジェクト化
+  const recs = rows.slice(1).filter(r => r.length > 1 && r.join('') !== '').map(r => ({
+    name: get(r, 'name'),
+    tanto: get(r, 'tanto') || '(未設定)',
+    d: {
+      hankyo: pDate(get(r, 'hankyo')),
+      shokai: pDate(get(r, 'shokai')),
+      daini: pDate(get(r, 'daini')),
+      best: pDate(get(r, 'best')),
+      keiyaku: pDate(get(r, 'keiyaku')),
+    },
+    baitai: get(r, 'baitai'),
+    tochi: get(r, 'tochi'),
+    yosan: pMoney(get(r, 'yosan')),
+    tsuki: pMoney(get(r, 'tsuki')),
+    jiko: pMoney(get(r, 'jiko')),
+    _key: null, _phone: norm(get(r, 'mobile')) || norm(get(r, 'kotei')), _addr: norm(get(r, 'addr')),
+  }));
+  for (const c of recs) c.group = groupOf(c.tanto);
+
+  // 重複統合: 正規化名 + (電話 or 住所)
+  const groups = new Map();
+  for (const c of recs) {
+    const key = norm(c.name) + '|' + (c._phone || c._addr);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(c);
+  }
+  const merged = [];
+  let dup = 0;
+  for (const g of groups.values()) {
+    if (g.length === 1) { merged.push(g[0]); continue; }
+    dup += g.length - 1;
+    // 情報量が多いレコードをベースに、各日付は最も早い日を採用
+    g.sort((a, b) => Object.values(b.d).filter(Boolean).length - Object.values(a.d).filter(Boolean).length);
+    const base = g[0];
+    for (const st of ['hankyo','shokai','daini','best','keiyaku']) {
+      const ds = g.map(x => x.d[st]).filter(Boolean);
+      if (ds.length) base.d[st] = new Date(Math.min(...ds.map(x => x.getTime())));
+    }
+    merged.push(base);
+  }
+  ALL = merged;
+  META = { raw: recs.length, merged: merged.length, dup,
+           noKeiyakuCol: !merged.some(c => c.d.keiyaku) };
+}
+
+/* ================= filtering ================= */
+let FLT = { period: '', tanto: '', tochi: '', mode: 'jisseki' };
+function currentFilter() { return FLT; }
+function refreshFilter() {
+  FLT = {
+    period: document.getElementById('f-period').value,
+    tanto: document.getElementById('f-tanto').value,
+    tochi: document.getElementById('f-tochi').value,
+    mode: document.getElementById('f-mode').value,
+  };
+}
+function inPeriod(c, period) {
+  if (!period) return true;
+  const y = +period;
+  const basis = c.d.shokai || c.d.hankyo; // 面談があれば面談年、なければ反響年
+  return basis ? basis.getFullYear() === y : false;
+}
+function filtered() {
+  return ALL.filter(c =>
+    (FLT.mode === 'jisseki' || inPeriod(c, FLT.period)) &&
+    (!FLT.tanto || c.group === FLT.tanto) &&
+    (!FLT.tochi || c.tochi === FLT.tochi)
+  );
+}
+
+/* ================= aggregation ================= */
+// 実績基準では「期間内に日付が発生した」ステージのみカウント。コホート基準では日付があれば期間を問わずカウント
+function stageHas(c, st) {
+  const d = c.d[st];
+  if (!d) return false;
+  if (FLT.mode === 'jisseki' && FLT.period) return d.getFullYear() === +FLT.period;
+  return true;
+}
+const STAGE_KEYS = ['hankyo', 'shokai', 'daini', 'best', 'keiyaku'];
+function funnelCounts(cs) {
+  const out = {};
+  for (const st of STAGE_KEYS) out[st] = cs.filter(c => stageHas(c, st)).length;
+  return out;
+}
+function isYoyaku(c) { return /来場予約|イベント予約/.test(c.baitai); }
+
+/* ================= tooltip ================= */
+const tip = document.getElementById('tooltip');
+function showTip(html, ev) {
+  tip.innerHTML = html;
+  tip.style.opacity = 1;
+  const x = Math.min(ev.clientX + 14, innerWidth - tip.offsetWidth - 10);
+  const y = Math.min(ev.clientY + 14, innerHeight - tip.offsetHeight - 10);
+  tip.style.left = x + 'px'; tip.style.top = y + 'px';
+}
+function hideTip() { tip.style.opacity = 0; }
+
+/* ================= generic SVG charts ================= */
+const M = { t: 14, r: 16, b: 34, l: 44 };
+function niceMax(v) {
+  if (v <= 0) return 1;
+  const p = Math.pow(10, Math.floor(Math.log10(v)));
+  for (const m of [1, 2, 2.5, 5, 10]) if (v <= m * p) return m * p;
+  return 10 * p;
+}
+function svgEl(w, h) {
+  const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  s.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  s.setAttribute('width', '100%');
+  s.style.display = 'block';
+  return s;
+}
+function axisAndGrid(svg, w, h, ymax, yFmt) {
+  const iw = w - M.l - M.r, ih = h - M.t - M.b;
+  const ticks = 4;
+  for (let i = 0; i <= ticks; i++) {
+    const val = ymax * i / ticks;
+    const y = M.t + ih - ih * i / ticks;
+    const ln = document.createElementNS(svg.namespaceURI, 'line');
+    ln.setAttribute('x1', M.l); ln.setAttribute('x2', M.l + iw);
+    ln.setAttribute('y1', y); ln.setAttribute('y2', y);
+    ln.setAttribute('stroke', i === 0 ? 'var(--baseline)' : 'var(--grid)');
+    ln.setAttribute('stroke-width', 1);
+    svg.appendChild(ln);
+    const tx = document.createElementNS(svg.namespaceURI, 'text');
+    tx.setAttribute('x', M.l - 6); tx.setAttribute('y', y + 4);
+    tx.setAttribute('text-anchor', 'end');
+    tx.setAttribute('font-size', 10);
+    tx.setAttribute('fill', 'var(--ink-muted)');
+    tx.style.fontVariantNumeric = 'tabular-nums';
+    tx.textContent = yFmt(val);
+    svg.appendChild(tx);
+  }
+  return { iw, ih };
+}
+function xLabels(svg, labels, xPos, h, every) {
+  labels.forEach((lb, i) => {
+    if (i % every !== 0) return;
+    const tx = document.createElementNS(svg.namespaceURI, 'text');
+    tx.setAttribute('x', xPos(i)); tx.setAttribute('y', h - M.b + 19);
+    tx.setAttribute('text-anchor', 'middle');
+    tx.setAttribute('font-size', 10);
+    tx.setAttribute('fill', 'var(--ink-muted)');
+    tx.textContent = lb;
+    svg.appendChild(tx);
+  });
+}
+function legendHTML(series, type) {
+  if (series.length < 2) return '';
+  return '<div class="legend">' + series.map(s =>
+    `<span class="key"><span class="${type === 'line' ? 'swline' : 'sw'}" style="background:${s.color}"></span>${esc(s.name)}</span>`
+  ).join('') + '</div>';
+}
+// 縦棒（グループ）
+function columnChart(el, { labels, series, yFmt, tipFmt, height = 240, labelEvery = 1 }) {
+  const w = 560, h = height;
+  el.innerHTML = legendHTML(series, 'bar');
+  const svg = svgEl(w, h);
+  const ymax = niceMax(Math.max(1, ...series.flatMap(s => s.data.filter(v => v != null))));
+  const { iw, ih } = axisAndGrid(svg, w, h, ymax, yFmt);
+  const n = labels.length, band = iw / n;
+  const gw = Math.min(24 * series.length, band * 0.7);
+  const bw = Math.max(2, gw / series.length - (series.length > 1 ? 2 : 0));
+  labels.forEach((lb, i) => {
+    const cx = M.l + band * (i + 0.5);
+    series.forEach((s, si) => {
+      const v = s.data[i];
+      if (v == null) return;
+      const bh = Math.max(0, ih * v / ymax);
+      const x = cx - gw / 2 + si * (gw / series.length) + 1;
+      const r = Math.min(4, bw / 2, bh);
+      const y0 = M.t + ih;
+      const p = document.createElementNS(svg.namespaceURI, 'path');
+      p.setAttribute('d', `M${x},${y0} L${x},${y0-bh+r} Q${x},${y0-bh} ${x+r},${y0-bh} L${x+bw-r},${y0-bh} Q${x+bw},${y0-bh} ${x+bw},${y0-bh+r} L${x+bw},${y0} Z`);
+      p.setAttribute('fill', s.color);
+      p.addEventListener('mousemove', ev => showTip(tipFmt(i, si, v), ev));
+      p.addEventListener('mouseleave', hideTip);
+      svg.appendChild(p);
+    });
+  });
+  xLabels(svg, labels, i => M.l + band * (i + 0.5), h, labelEvery);
+  el.appendChild(svg);
+}
+// 折れ線
+function lineChart(el, { labels, series, yFmt, tipFmt, height = 240, labelEvery = 1, ymaxFix }) {
+  const w = 560, h = height;
+  el.innerHTML = legendHTML(series, 'line');
+  const svg = svgEl(w, h);
+  const ymax = ymaxFix || niceMax(Math.max(1, ...series.flatMap(s => s.data.filter(v => v != null))));
+  const { iw, ih } = axisAndGrid(svg, w, h, ymax, yFmt);
+  const n = labels.length;
+  const xp = i => M.l + (n === 1 ? iw / 2 : iw * i / (n - 1));
+  const yp = v => M.t + ih - ih * Math.min(v, ymax) / ymax;
+  series.forEach(s => {
+    let d = '', started = false;
+    s.data.forEach((v, i) => {
+      if (v == null) { started = false; return; }
+      d += (started ? 'L' : 'M') + xp(i) + ',' + yp(v);
+      started = true;
+    });
+    const path = document.createElementNS(svg.namespaceURI, 'path');
+    path.setAttribute('d', d);
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', s.color);
+    path.setAttribute('stroke-width', 2);
+    path.setAttribute('stroke-linejoin', 'round');
+    path.setAttribute('stroke-linecap', 'round');
+    svg.appendChild(path);
+    s.data.forEach((v, i) => {
+      if (v == null) return;
+      const c = document.createElementNS(svg.namespaceURI, 'circle');
+      c.setAttribute('cx', xp(i)); c.setAttribute('cy', yp(v));
+      c.setAttribute('r', 4);
+      c.setAttribute('fill', s.color);
+      c.setAttribute('stroke', 'var(--surface-1)');
+      c.setAttribute('stroke-width', 2);
+      c.addEventListener('mousemove', ev => showTip(tipFmt(i, s, v), ev));
+      c.addEventListener('mouseleave', hideTip);
+      svg.appendChild(c);
+    });
+  });
+  xLabels(svg, labels, xp, h, labelEvery);
+  el.appendChild(svg);
+}
+// 散布図
+function scatterChart(el, { points, xFmt, yFmt, xTitle, yTitle, height = 300 }) {
+  const w = 560, h = height;
+  el.innerHTML = '';
+  if (!points.length) { el.innerHTML = '<div class="chart-note">表示できるデータがありません（対象件数不足）。</div>'; return; }
+  const svg = svgEl(w, h);
+  const xmax = niceMax(Math.max(...points.map(p => p.x)) * 1.1);
+  const ymax = niceMax(Math.max(...points.map(p => p.y)) * 1.15);
+  const { iw, ih } = axisAndGrid(svg, w, h, ymax, yFmt);
+  const xp = v => M.l + iw * v / xmax;
+  const yp = v => M.t + ih - ih * v / ymax;
+  // x ticks（原点は省略してy軸0%との重なりを回避）
+  for (let i = 1; i <= 4; i++) {
+    const val = xmax * i / 4;
+    const tx = document.createElementNS(svg.namespaceURI, 'text');
+    tx.setAttribute('x', xp(val)); tx.setAttribute('y', h - M.b + 14);
+    tx.setAttribute('text-anchor', 'middle');
+    tx.setAttribute('font-size', 10);
+    tx.setAttribute('fill', 'var(--ink-muted)');
+    tx.textContent = xFmt(val);
+    svg.appendChild(tx);
+  }
+  // axis titles
+  const xt = document.createElementNS(svg.namespaceURI, 'text');
+  xt.setAttribute('x', M.l + iw / 2); xt.setAttribute('y', h - 2);
+  xt.setAttribute('text-anchor', 'middle'); xt.setAttribute('font-size', 11);
+  xt.setAttribute('fill', 'var(--ink-2)');
+  xt.textContent = xTitle;
+  svg.appendChild(xt);
+  const yt = document.createElementNS(svg.namespaceURI, 'text');
+  yt.setAttribute('x', 12); yt.setAttribute('y', M.t + ih / 2);
+  yt.setAttribute('transform', `rotate(-90 12 ${M.t + ih / 2})`);
+  yt.setAttribute('text-anchor', 'middle'); yt.setAttribute('font-size', 11);
+  yt.setAttribute('fill', 'var(--ink-2)');
+  yt.textContent = yTitle;
+  svg.appendChild(yt);
+  const placed = []; // ラベル衝突回避用
+  points.forEach(p => {
+    const c = document.createElementNS(svg.namespaceURI, 'circle');
+    c.setAttribute('cx', xp(p.x)); c.setAttribute('cy', yp(p.y));
+    c.setAttribute('r', 6);
+    c.setAttribute('fill', 'var(--s1)');
+    c.setAttribute('stroke', 'var(--surface-1)');
+    c.setAttribute('stroke-width', 2);
+    c.addEventListener('mousemove', ev => showTip(p.tip, ev));
+    c.addEventListener('mouseleave', hideTip);
+    svg.appendChild(c);
+    // 候補位置を試し、既配置ラベル・点と重ならない場所に置く
+    const tw = p.label.length * 10 + 4, th = 12;
+    const px0 = xp(p.x), py0 = yp(p.y);
+    const cands = [[8, -8], [8, 16], [-tw - 8, -8], [-tw - 8, 16], [8, -20], [8, 28]];
+    let pos = cands[0];
+    for (const [dx, dy] of cands) {
+      const bx = px0 + dx, by = py0 + dy - th;
+      const hit = placed.some(b => bx < b.x + b.w && b.x < bx + tw && by < b.y + b.h && b.y < by + th)
+        || points.some(q => q !== p && Math.abs(xp(q.x) - (bx + tw / 2)) < tw / 2 + 7 && Math.abs(yp(q.y) - (by + th / 2)) < th / 2 + 7)
+        || bx < M.l || bx + tw > w - 2;
+      if (!hit) { pos = [dx, dy]; break; }
+    }
+    placed.push({ x: px0 + pos[0], y: py0 + pos[1] - th, w: tw, h: th });
+    const tx = document.createElementNS(svg.namespaceURI, 'text');
+    tx.setAttribute('x', px0 + pos[0]);
+    tx.setAttribute('y', py0 + pos[1]);
+    tx.setAttribute('font-size', 10);
+    tx.setAttribute('fill', 'var(--ink-2)');
+    tx.textContent = p.label;
+    svg.appendChild(tx);
+  });
+  el.appendChild(svg);
+}
+
+/* ================= render ================= */
+const STAGES = [
+  { key: 'shokai', label: '初回面談' },
+  { key: 'daini', label: '第二面談' },
+  { key: 'best', label: 'BP申込' },
+  { key: 'keiyaku', label: '契約' },
+];
+const useKeiyaku = () => !META.noKeiyakuCol;
+
+function renderAll() {
+  refreshFilter();
+  const cs = filtered();
+  renderKPI(cs);
+  renderFunnel(cs);
+  renderTantoTable(cs);
+  renderTrends(cs);
+  renderH1(cs);
+  renderH2(cs);
+  renderH3(cs);
+  renderTochi(cs);
+  renderMoney(cs);
+  renderDefs(cs);
+}
+
+function renderKPI(cs) {
+  const f = funnelCounts(cs);
+  const lt = cs.filter(c => c.d.shokai && stageHas(c, 'keiyaku')).map(c => days(c.d.shokai, c.d.keiyaku));
+  const ltBP = cs.filter(c => c.d.shokai && stageHas(c, 'best')).map(c => days(c.d.shokai, c.d.best));
+  const jisPeriod = FLT.mode === 'jisseki' && FLT.period;
+  const nCust = jisPeriod ? cs.filter(c => STAGE_KEYS.some(st => stageHas(c, st))).length : cs.length;
+  const tiles = [
+    { label: jisPeriod ? '顧客数（期間内に動きあり）' : '顧客数（重複統合後）', value: nCust.toLocaleString(), note: `反響${jisPeriod ? '発生' : 'あり'} ${f.hankyo.toLocaleString()}件` },
+    { label: '初回面談', value: f.shokai.toLocaleString(), note: `反響→面談 ${fmtPct(pct(f.shokai, f.hankyo))}` },
+    { label: '第二面談率', value: fmtPct(pct(f.daini, f.shokai)), note: `${f.daini}件 ÷ 初回${f.shokai}件` },
+    { label: 'BP申込率', value: fmtPct(pct(f.best, f.shokai)), note: `${f.best}件 ÷ 初回${f.shokai}件` },
+    useKeiyaku()
+      ? { label: '契約率', value: fmtPct(pct(f.keiyaku, f.shokai)), note: `${f.keiyaku}件 ÷ 初回${f.shokai}件` }
+      : { label: '契約率', value: 'データなし', na: true, note: '契約列が全件空欄' },
+    useKeiyaku()
+      ? { label: '初回→契約 中央値', value: median(lt) != null ? median(lt) + '日' : '−', note: `n=${lt.length}` }
+      : { label: '初回→BP申込 中央値', value: median(ltBP) != null ? median(ltBP) + '日' : '−', note: `n=${ltBP.length}（契約データなしのため代替）` },
+  ];
+  document.getElementById('kpi-tiles').innerHTML = tiles.map(t =>
+    `<div class="tile"><div class="label">${esc(t.label)}</div><div class="value${t.na ? ' na' : ''}">${esc(t.value)}</div><div class="note">${esc(t.note)}</div></div>`
+  ).join('');
+}
+
+function renderFunnel(cs) {
+  const f = funnelCounts(cs);
+  const seq = ['hankyo', 'shokai', 'daini', 'best', 'keiyaku'];
+  const names = { hankyo: '反響', shokai: '初回面談', daini: '第二面談', best: 'BP申込', keiyaku: '契約' };
+  const colors = ['var(--seq-250)', 'var(--seq-400)', 'var(--seq-400)', 'var(--seq-550)', 'var(--seq-700)'];
+  const maxv = Math.max(1, f.hankyo);
+  let html = '';
+  seq.forEach((k, i) => {
+    if (i > 0) {
+      const r = pct(f[seq[i]], f[seq[i-1]]);
+      html += `<div class="farrow">→<b>${fmtPct(r)}</b></div>`;
+    }
+    const hgt = Math.max(6, 120 * f[k] / maxv);
+    html += `<div class="fstage"><div class="cnt">${f[k].toLocaleString()}</div><div class="bar" style="height:${hgt}px;background:${colors[i]}"></div><div class="nm">${names[k]}</div></div>`;
+  });
+  document.getElementById('funnel').innerHTML = html;
+}
+
+let sortState = { col: -1, dir: 1 }; // col:-1 = 固定順（袴田→平野→森→糸繰→三村→平澤→その他）
+function renderTantoTable(cs) {
+  const by = new Map();
+  for (const c of cs) {
+    if (!by.has(c.group)) by.set(c.group, []);
+    by.get(c.group).push(c);
+  }
+  const rows = [];
+  for (const [t, g] of by) {
+    const f = funnelCounts(g);
+    if (f.hankyo + f.shokai === 0) continue;
+    rows.push({
+      t, hankyo: f.hankyo, shokai: f.shokai, daini: f.daini, best: f.best, keiyaku: f.keiyaku,
+      apoR: pct(f.shokai, f.hankyo), dainiR: pct(f.daini, f.shokai),
+      bestR: pct(f.best, f.shokai), keiR: pct(f.keiyaku, f.shokai),
+    });
+  }
+  const cols = [
+    { k: 't', label: '担当者' },
+    { k: 'hankyo', label: '反響' },
+    { k: 'shokai', label: '初回面談' },
+    { k: 'apoR', label: '反響→面談率' },
+    { k: 'daini', label: '第二面談' },
+    { k: 'dainiR', label: '第二面談率' },
+    { k: 'best', label: 'BP申込' },
+    { k: 'bestR', label: 'BP申込率' },
+    { k: 'keiyaku', label: '契約' },
+    { k: 'keiR', label: '契約率' },
+  ];
+  rows.sort((a, b) => {
+    if (sortState.col < 0) return GROUPS.indexOf(a.t) - GROUPS.indexOf(b.t);
+    const k = cols[sortState.col].k;
+    const av = a[k] == null ? -1 : a[k], bv = b[k] == null ? -1 : b[k];
+    if (typeof av === 'string') return sortState.dir * av.localeCompare(bv, 'ja');
+    return sortState.dir * (av - bv);
+  });
+  const total = funnelCounts(cs);
+  const bar = (v, color) => v == null ? '' : `<span class="ratebar"><i style="width:${Math.min(100, v)}%;background:${color}"></i></span>`;
+  const tbl = document.getElementById('tanto-table');
+  tbl.innerHTML =
+    '<thead><tr>' + cols.map((c, i) =>
+      `<th data-i="${i}" class="${i === sortState.col ? 'sorted' : ''}">${esc(c.label)}${i === sortState.col ? (sortState.dir < 0 ? ' ▼' : ' ▲') : ''}</th>`
+    ).join('') + '</tr></thead><tbody>' +
+    rows.map(r => {
+      const dim = r.shokai < 5 ? ' style="color:var(--ink-muted)"' : '';
+      return `<tr${dim}><td>${esc(r.t)}</td><td class="num">${r.hankyo}</td><td class="num">${r.shokai}</td>` +
+        `<td class="num">${fmtPct(r.apoR)}</td>` +
+        `<td class="num">${r.daini}</td><td class="num">${fmtPct(r.dainiR)}${bar(r.dainiR, 'var(--s1)')}</td>` +
+        `<td class="num">${r.best}</td><td class="num">${fmtPct(r.bestR)}${bar(r.bestR, 'var(--s2)')}</td>` +
+        `<td class="num">${r.keiyaku}</td><td class="num">${useKeiyaku() ? fmtPct(r.keiR) + bar(r.keiR, 'var(--s5)') : '−'}</td></tr>`;
+    }).join('') +
+    `<tr class="total"><td>合計</td><td class="num">${total.hankyo}</td><td class="num">${total.shokai}</td>` +
+    `<td class="num">${fmtPct(pct(total.shokai, total.hankyo))}</td>` +
+    `<td class="num">${total.daini}</td><td class="num">${fmtPct(pct(total.daini, total.shokai))}</td>` +
+    `<td class="num">${total.best}</td><td class="num">${fmtPct(pct(total.best, total.shokai))}</td>` +
+    `<td class="num">${total.keiyaku}</td><td class="num">${useKeiyaku() ? fmtPct(pct(total.keiyaku, total.shokai)) : '−'}</td></tr>` +
+    '</tbody>';
+  tbl.querySelectorAll('thead th').forEach(th => th.addEventListener('click', () => {
+    const i = +th.dataset.i;
+    if (sortState.col === i) sortState.dir *= -1;
+    else { sortState.col = i; sortState.dir = -1; }
+    renderTantoTable(filtered());
+  }));
+}
+
+function renderTrends(cs) {
+  const jis = FLT.mode === 'jisseki';
+  // 推移は期間フィルタに関係なく全期間の月/年を表示する（実績基準では発生日で直接カウント）
+  const stCount = (st, y, m) => cs.filter(c => {
+    const d = c.d[st];
+    return d && d.getFullYear() === y && (m == null || d.getMonth() + 1 === m);
+  }).length;
+  const eventCounts = (y, m) => ({
+    hankyo: stCount('hankyo', y, m), shokai: stCount('shokai', y, m),
+    daini: stCount('daini', y, m), best: stCount('best', y, m), keiyaku: stCount('keiyaku', y, m),
+  });
+  document.getElementById('yearly-desc').textContent = jis
+    ? '各ステージの発生件数（例: 契約＝契約日がその年の件数）。率は同年の件数÷初回面談件数で、顧客の対応関係はない参考値。'
+    : 'その年に初回面談を実施した顧客がその後どこまで進んだか（コホート追跡）。';
+  document.getElementById('monthly-desc').textContent = jis
+    ? '各ステージの発生件数（棒＝初回面談数）。率は同月の件数比（参考値）。'
+    : 'その月に初回面談を実施した顧客の件数（棒）と歩留り率（線）。直近月は進行中のため率が低く出ます。';
+
+  // ---- 年次 ----
+  let years, yData;
+  if (jis) {
+    const ys = new Set();
+    for (const c of cs) for (const st of STAGE_KEYS) if (c.d[st] && st !== 'hankyo') ys.add(c.d[st].getFullYear());
+    years = [...ys].sort();
+    yData = years.map(y => eventCounts(y, null));
+  } else {
+    const byYear = new Map();
+    for (const c of cs) {
+      if (!c.d.shokai) continue;
+      const y = c.d.shokai.getFullYear();
+      if (!byYear.has(y)) byYear.set(y, []);
+      byYear.get(y).push(c);
+    }
+    years = [...byYear.keys()].sort();
+    yData = years.map(y => funnelCounts(byYear.get(y)));
+  }
+  const rateSeries = [
+    { name: '第二面談率', color: 'var(--s1)', data: yData.map(f => pct(f.daini, f.shokai)) },
+    { name: 'BP申込率', color: 'var(--s2)', data: yData.map(f => pct(f.best, f.shokai)) },
+  ];
+  if (useKeiyaku()) rateSeries.push({ name: '契約率', color: 'var(--s5)', data: yData.map(f => pct(f.keiyaku, f.shokai)) });
+  lineChart(document.getElementById('yearly-chart'), {
+    labels: years.map(String),
+    series: rateSeries,
+    yFmt: v => v.toFixed(0) + '%',
+    tipFmt: (i, s, v) => `${years[i]}年 ${s.name}: ${v.toFixed(1)}%`,
+    height: 220,
+  });
+  document.getElementById('yearly-table').innerHTML =
+    '<thead><tr><th>年</th><th>初回面談</th><th>第二面談</th><th>BP申込</th><th>契約</th></tr></thead><tbody>' +
+    years.map((y, i) => {
+      const f = yData[i];
+      return `<tr><td>${y}</td><td class="num">${f.shokai}</td><td class="num">${f.daini} (${fmtPct(pct(f.daini, f.shokai))})</td><td class="num">${f.best} (${fmtPct(pct(f.best, f.shokai))})</td><td class="num">${useKeiyaku() ? f.keiyaku + ' (' + fmtPct(pct(f.keiyaku, f.shokai)) + ')' : '−'}</td></tr>`;
+    }).join('') + '</tbody>';
+
+  // ---- 月次(直近24ヶ月) ----
+  const now = new Date();
+  const months = [];
+  for (let i = 23; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push({ y: d.getFullYear(), m: d.getMonth() + 1 });
+  }
+  const mData = months.map(({ y, m }) => jis
+    ? eventCounts(y, m)
+    : funnelCounts(cs.filter(c => c.d.shokai && c.d.shokai.getFullYear() === y && c.d.shokai.getMonth() + 1 === m))
+  );
+  const mLabels = months.map(({ y, m }) => (m === 1 ? y + '/' : '') + m);
+  columnChart(document.getElementById('monthly-count-chart'), {
+    labels: mLabels,
+    series: [{ name: '初回面談数', color: 'var(--seq-400)', data: mData.map(f => f.shokai) }],
+    yFmt: v => String(Math.round(v)),
+    tipFmt: (i) => `${months[i].y}年${months[i].m}月\n初回面談 ${mData[i].shokai}件 / 第二 ${mData[i].daini}件 / BP ${mData[i].best}件` + (useKeiyaku() ? ` / 契約 ${mData[i].keiyaku}件` : ''),
+    height: 180, labelEvery: 2,
+  });
+  const mRateSeries = [
+    { name: '第二面談率', color: 'var(--s1)', data: mData.map(f => pct(f.daini, f.shokai)) },
+    { name: 'BP申込率', color: 'var(--s2)', data: mData.map(f => pct(f.best, f.shokai)) },
+  ];
+  if (useKeiyaku()) mRateSeries.push({ name: '契約率', color: 'var(--s5)', data: mData.map(f => pct(f.keiyaku, f.shokai)) });
+  lineChart(document.getElementById('monthly-rate-chart'), {
+    labels: mLabels,
+    series: mRateSeries,
+    yFmt: v => v.toFixed(0) + '%',
+    tipFmt: (i, s, v) => `${months[i].y}年${months[i].m}月 ${s.name}: ${v.toFixed(1)}%（初回${mData[i].shokai}件）`,
+    height: 200, labelEvery: 2,
+  });
+}
+
+// 担当者別の指標セット（散布図用）
+function tantoStats(cs, minShokai) {
+  const by = new Map();
+  for (const c of cs) {
+    if (!by.has(c.group)) by.set(c.group, []);
+    by.get(c.group).push(c);
+  }
+  const out = [];
+  for (const t of GROUPS) {
+    if (!by.has(t)) continue;
+    const g = by.get(t);
+    const f = funnelCounts(g);
+    if (f.shokai < (minShokai || 10)) continue;
+    const ltK = g.filter(c => c.d.shokai && stageHas(c, 'keiyaku')).map(c => days(c.d.shokai, c.d.keiyaku));
+    const ltB = g.filter(c => c.d.shokai && stageHas(c, 'best')).map(c => days(c.d.shokai, c.d.best));
+    const yo = g.filter(c => isYoyaku(c) && stageHas(c, 'hankyo'));
+    const yoMiss = yo.filter(c => !c.d.shokai);
+    out.push({
+      t, f,
+      dainiR: pct(f.daini, f.shokai), bestR: pct(f.best, f.shokai), keiR: pct(f.keiyaku, f.shokai),
+      ltK: median(ltK), nLtK: ltK.length, ltB: median(ltB), nLtB: ltB.length,
+      yoN: yo.length, yoMissN: yoMiss.length, yoMissR: pct(yoMiss.length, yo.length),
+    });
+  }
+  return out;
+}
+function shortName(t) { return t.split(/[\s　]/)[0]; }
+
+function renderH1(cs) {
+  const stats = tantoStats(cs, 10);
+  const useK = useKeiyaku();
+  document.getElementById('h1-desc').textContent = useK
+    ? '担当者別に、初回面談→契約のリードタイム中央値（横軸）と契約率（縦軸）をプロット。左上にいるほど「早く決めて高率」。'
+    : '契約データが空のため代替表示：初回面談→ベストプラン申込のリードタイム中央値（横軸）とBP申込率（縦軸）。契約込みのCSVを読み込むと本来の検証（リードタイム×契約率）に切り替わります。';
+  const pts = stats
+    .filter(s => useK ? (s.ltK != null && s.nLtK >= 3) : (s.ltB != null && s.nLtB >= 3))
+    .map(s => ({
+      x: useK ? s.ltK : s.ltB,
+      y: useK ? s.keiR : s.bestR,
+      label: shortName(s.t),
+      tip: `${s.t}\nリードタイム中央値 ${(useK ? s.ltK : s.ltB)}日（n=${useK ? s.nLtK : s.nLtB}）\n${useK ? '契約率' : 'BP申込率'} ${fmtPct(useK ? s.keiR : s.bestR)}（初回${s.f.shokai}件）`,
+    }));
+  scatterChart(document.getElementById('h1-chart'), {
+    points: pts,
+    xFmt: v => Math.round(v) + '日',
+    yFmt: v => v.toFixed(0) + '%',
+    xTitle: useK ? '初回面談→契約 リードタイム中央値（日）' : '初回面談→BP申込 リードタイム中央値（日）',
+    yTitle: useK ? '契約率（契約÷初回面談）' : 'BP申込率（BP÷初回面談）',
+  });
+  document.getElementById('h1-note').textContent =
+    `対象: 初回面談10件以上かつ到達3件以上の担当者 ${pts.length}名。各点にマウスを乗せると詳細表示。`;
+}
+
+function renderH2(cs) {
+  const stats = tantoStats(cs, 10);
+  const useK = useKeiyaku();
+  const el = document.getElementById('h2-chart');
+  if (useK) {
+    document.getElementById('h2-desc').textContent = '担当者別に、BP申込率（横軸）と契約率（縦軸）をプロット。右上への並びが見えれば仮説②を支持。';
+    const pts = stats.filter(s => s.bestR != null).map(s => ({
+      x: s.bestR, y: s.keiR || 0, label: shortName(s.t),
+      tip: `${s.t}\nBP申込率 ${fmtPct(s.bestR)} / 契約率 ${fmtPct(s.keiR)}\n初回面談 ${s.f.shokai}件`,
+    }));
+    scatterChart(el, {
+      points: pts,
+      xFmt: v => v.toFixed(0) + '%', yFmt: v => v.toFixed(0) + '%',
+      xTitle: 'BP申込率', yTitle: '契約率',
+    });
+    document.getElementById('h2-note').textContent = `対象: 初回面談10件以上の担当者 ${pts.length}名。`;
+  } else {
+    document.getElementById('h2-desc').textContent = '契約データが空のため、現時点では検証不可。代替として第二面談率（横軸）とBP申込率（縦軸）の関係を表示します。BPまで進める力と面談を深める力の相関の目安になります。';
+    const pts = stats.filter(s => s.dainiR != null).map(s => ({
+      x: s.dainiR, y: s.bestR || 0, label: shortName(s.t),
+      tip: `${s.t}\n第二面談率 ${fmtPct(s.dainiR)} / BP申込率 ${fmtPct(s.bestR)}\n初回面談 ${s.f.shokai}件`,
+    }));
+    scatterChart(el, {
+      points: pts,
+      xFmt: v => v.toFixed(0) + '%', yFmt: v => v.toFixed(0) + '%',
+      xTitle: '第二面談率', yTitle: 'BP申込率',
+    });
+    document.getElementById('h2-note').textContent = `対象: 初回面談10件以上の担当者 ${pts.length}名。契約込みCSVで本来の検証に切り替わります。`;
+  }
+}
+
+function renderH3(cs) {
+  const stats = tantoStats(cs, 1).filter(s => s.yoN >= 3); // 固定順（tantoStatsがGROUPS順で返す）
+  const useK = useKeiyaku();
+  columnChart(document.getElementById('h3-chart'), {
+    labels: stats.map(s => shortName(s.t)),
+    series: [{ name: '面談未実施率', color: 'var(--s6)', data: stats.map(s => s.yoMissR) }],
+    yFmt: v => v.toFixed(0) + '%',
+    tipFmt: (i) => `${stats[i].t}\n予約系反響 ${stats[i].yoN}件中 面談未実施 ${stats[i].yoMissN}件（${fmtPct(stats[i].yoMissR)}）`,
+    height: 200,
+  });
+  document.getElementById('h3-table').innerHTML =
+    `<thead><tr><th>担当者</th><th>予約系反響</th><th>面談未実施</th><th>未実施率</th><th>${useK ? '契約率' : 'BP申込率(参考)'}</th></tr></thead><tbody>` +
+    stats.map(s =>
+      `<tr><td>${esc(s.t)}</td><td class="num">${s.yoN}</td><td class="num">${s.yoMissN}</td><td class="num">${fmtPct(s.yoMissR)}</td><td class="num">${fmtPct(useK ? s.keiR : s.bestR)}</td></tr>`
+    ).join('') + '</tbody>';
+}
+
+function renderTochi(cs) {
+  const groups = [
+    { label: '土地有', color: 'var(--s2)', cs: cs.filter(c => c.tochi === '有') },
+    { label: '土地無', color: 'var(--s1)', cs: cs.filter(c => c.tochi === '無') },
+  ];
+  const fs = groups.map(g => funnelCounts(g.cs));
+  const metrics = [
+    { label: '反響→面談率', get: f => pct(f.shokai, f.hankyo) },
+    { label: '第二面談率', get: f => pct(f.daini, f.shokai) },
+    { label: 'BP申込率', get: f => pct(f.best, f.shokai) },
+  ];
+  if (useKeiyaku()) metrics.push({ label: '契約率', get: f => pct(f.keiyaku, f.shokai) });
+  columnChart(document.getElementById('tochi-chart'), {
+    labels: metrics.map(m => m.label),
+    series: groups.map((g, gi) => ({
+      name: g.label, color: g.color,
+      data: metrics.map(m => m.get(fs[gi])),
+    })),
+    yFmt: v => v.toFixed(0) + '%',
+    tipFmt: (i, si, v) => `${groups[si].label} ${metrics[i].label}: ${v.toFixed(1)}%`,
+    height: 220,
+  });
+  document.getElementById('tochi-table').innerHTML =
+    `<thead><tr><th></th><th>顧客数</th><th>反響</th><th>初回面談</th><th>第二面談</th><th>BP申込</th><th>契約</th></tr></thead><tbody>` +
+    groups.map((g, gi) => {
+      const f = fs[gi];
+      return `<tr><td>${g.label}</td><td class="num">${g.cs.length}</td><td class="num">${f.hankyo}</td><td class="num">${f.shokai}</td><td class="num">${f.daini} (${fmtPct(pct(f.daini, f.shokai))})</td><td class="num">${f.best} (${fmtPct(pct(f.best, f.shokai))})</td><td class="num">${useKeiyaku() ? f.keiyaku + ' (' + fmtPct(pct(f.keiyaku, f.shokai)) + ')' : '−'}</td></tr>`;
+    }).join('') + '</tbody>';
+}
+
+const MONEY_DEFS = {
+  yosan: { title: '予算', bands: [[null, null, '0/未入力'], [1, 2499, '〜2,500万未満'], [2500, 3499, '2,500〜3,500万'], [3500, 4999, '3,500〜5,000万'], [5000, Infinity, '5,000万〜']] },
+  jiko: { title: '自己資金', bands: [[null, null, '0/未入力'], [1, 100, '〜100万'], [101, 500, '101〜500万'], [501, 1000, '501〜1,000万'], [1001, Infinity, '1,000万超']] },
+  tsuki: { title: '月々支払予算', bands: [[null, null, '0/未入力'], [1, 8, '〜8万'], [8.1, 10, '8〜10万'], [10.1, 13, '10〜13万'], [13.1, Infinity, '13万超']] },
+};
+let moneyKey = 'yosan';
+function renderMoney(cs) {
+  const tabs = document.getElementById('money-tabs');
+  tabs.innerHTML = Object.entries(MONEY_DEFS).map(([k, d]) =>
+    `<button data-k="${k}" style="${k === moneyKey ? 'border-color:var(--s1);color:var(--s1);' : ''}font:inherit;font-size:12px;padding:4px 12px;margin-right:6px;border:1px solid var(--baseline);border-radius:6px;background:var(--surface-1);color:var(--ink-2);cursor:pointer">${d.title}</button>`
+  ).join('');
+  tabs.querySelectorAll('button').forEach(b => b.addEventListener('click', () => { moneyKey = b.dataset.k; renderMoney(filtered()); }));
+
+  const def = MONEY_DEFS[moneyKey];
+  const sh = cs.filter(c => c.d.shokai);
+  const rows = def.bands.map(([lo, hi, label]) => {
+    let g;
+    if (lo === null) g = sh.filter(c => !(c[moneyKey] > 0));
+    else g = sh.filter(c => c[moneyKey] != null && c[moneyKey] >= lo && c[moneyKey] <= hi);
+    const f = funnelCounts(g);
+    return { label, f };
+  });
+  const series = [
+    { name: '第二面談率', color: 'var(--s1)', data: rows.map(r => pct(r.f.daini, r.f.shokai)) },
+    { name: 'BP申込率', color: 'var(--s2)', data: rows.map(r => pct(r.f.best, r.f.shokai)) },
+  ];
+  if (useKeiyaku()) series.push({ name: '契約率', color: 'var(--s5)', data: rows.map(r => pct(r.f.keiyaku, r.f.shokai)) });
+  columnChart(document.getElementById('money-chart'), {
+    labels: rows.map(r => r.label),
+    series,
+    yFmt: v => v.toFixed(0) + '%',
+    tipFmt: (i, si, v) => `${rows[i].label}（初回${rows[i].f.shokai}件）\n${series[si].name}: ${v.toFixed(1)}%`,
+    height: 220,
+  });
+  document.getElementById('money-table').innerHTML =
+    `<thead><tr><th>${def.title}帯</th><th>初回面談</th><th>第二面談率</th><th>BP申込率</th><th>契約率</th></tr></thead><tbody>` +
+    rows.map(r =>
+      `<tr><td>${esc(r.label)}</td><td class="num">${r.f.shokai}</td><td class="num">${fmtPct(pct(r.f.daini, r.f.shokai))}</td><td class="num">${fmtPct(pct(r.f.best, r.f.shokai))}</td><td class="num">${useKeiyaku() ? fmtPct(pct(r.f.keiyaku, r.f.shokai)) : '−'}</td></tr>`
+    ).join('') + '</tbody>';
+}
+
+function renderDefs(cs) {
+  const f = currentFilter();
+  document.getElementById('defs').innerHTML = `
+    <dt>担当者の表示</dt><dd>袴田→平野→森→糸繰→三村→平澤の固定順。それ以外の担当者（未設定・管理者アカウント含む）はすべて「その他」に集約。</dd>
+    <dt>重複統合</dt><dd>名前（空白除去）＋電話番号（携帯優先、なければ住所）が一致する行を同一顧客として統合。日付は各ステージで最も早い日を採用。今回: ${META.raw.toLocaleString()}行 → ${META.merged.toLocaleString()}人（${META.dup}件統合）。</dd>
+    <dt>歩留り率の分母</dt><dd>第二面談率・BP申込率・契約率はすべて「÷ 初回面談数」。反響→面談率のみ「÷ 反響数」。</dd>
+    <dt>集計基準（2つのモード）</dt><dd><b>実績基準</b>＝選択期間内に日付が発生した件数を各ステージで数える（例: 2026年の契約数＝契約日が2026年の件数。前年に面談した顧客の契約も含む）。契約実績の検証向き。率は同期間の件数比で顧客の対応関係はない参考値のため、100%を超えることもある。<b>コホート基準</b>＝期間内に初回面談した顧客がその後どこまで進んだかを追跡する真の歩留り。営業力の比較向き。期間を「全期間」にすると両者は一致する。</dd>
+    <dt>期間フィルタ</dt><dd>実績基準では各ステージ日付の年で判定。コホート基準では初回面談日（無い顧客は反響日）の年で顧客を絞り込み。</dd>
+    ${META.noKeiyakuCol ? '<dt style="color:var(--critical)">契約データ</dt><dd>読み込んだCSVは契約列が全件空欄です（ステータス「見込み」のみの抽出のため、契約済顧客が含まれていない可能性が高い）。PGクラウドで<b>全ステータス（契約済・OB含む）</b>を対象にエクスポートし直すと、契約率・仮説①②が本来の形で表示されます。</dd>' : ''}
+  `;
+  document.getElementById('today').textContent = new Date().toLocaleDateString('ja-JP');
+}
+
+/* ================= boot ================= */
+function initFilters() {
+  const years = new Set();
+  for (const c of ALL) {
+    const d = c.d.shokai || c.d.hankyo;
+    if (d) years.add(d.getFullYear());
+  }
+  const ys = [...years].sort((a, b) => b - a);
+  document.getElementById('f-period').innerHTML =
+    '<option value="">全期間</option>' + ys.map(y => `<option value="${y}">${y}年</option>`).join('');
+  const present = new Set(ALL.map(c => c.group));
+  const ts = GROUPS.filter(g => present.has(g));
+  document.getElementById('f-tanto').innerHTML =
+    '<option value="">全員</option>' + ts.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
+  ['f-period', 'f-tanto', 'f-tochi', 'f-mode'].forEach(id =>
+    document.getElementById(id).addEventListener('change', renderAll));
+}
+
+function showBanners() {
+  const b = document.getElementById('banners');
+  let html = '';
+  if (META.noKeiyakuCol) {
+    html += `<div class="banner">⚠ <b>このCSVには契約日データが1件もありません。</b>ステータス「見込み」のみの抽出になっている可能性があります。契約率・リードタイム分析（仮説①②）を行うには、PGクラウドで<b>契約済・OB等を含む全ステータス</b>でCSVをエクスポートし直して読み込んでください。それまでの間はBP申込率を代替指標として表示します。</div>`;
+  }
+  if (META.dup > 0) {
+    html += `<div class="banner info">重複顧客 ${META.dup}件を統合しました（${META.raw.toLocaleString()}行 → ${META.merged.toLocaleString()}人）。統合ルールは最下部「集計定義」を参照。</div>`;
+  }
+  b.innerHTML = html;
+}
+
+function handleFile(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const rows = parseCSV(reader.result);
+      loadRows(rows);
+      document.getElementById('dropzone').style.display = 'none';
+      document.getElementById('dash').style.display = 'block';
+      showBanners();
+      initFilters();
+      sortState = { col: -1, dir: 1 };
+      renderAll();
+    } catch (e) {
+      alert('CSVの読み込みに失敗しました: ' + e.message + '\nPGクラウドからダウンロードした顧客CSV（UTF-8）を指定してください。');
+    }
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+const dz = document.getElementById('dropzone');
+const fi = document.getElementById('fileinput');
+dz.addEventListener('click', () => fi.click());
+fi.addEventListener('change', () => fi.files[0] && handleFile(fi.files[0]));
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('dragover');
+  if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+document.getElementById('btn-reload').addEventListener('click', () => {
+  document.getElementById('dash').style.display = 'none';
+  document.getElementById('dropzone').style.display = 'block';
+  fi.value = '';
+});
+</script>
+</body>
+</html>
