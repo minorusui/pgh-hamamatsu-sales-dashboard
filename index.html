@@ -203,7 +203,7 @@ footer { font-size: 11px; color: var(--ink-muted); margin-top: 30px; }
 <div class="wrap">
 <header class="app">
   <h1>PGハウス浜松 営業力分析ダッシュボード</h1>
-  <div class="sub">PGクラウド顧客CSVを読み込むと、初回面談→第二面談→ベストプラン申込→契約の歩留りを担当者別・年次・月次で分析します。データはこのPC内でのみ処理され、外部送信されません。</div>
+  <div class="sub">PGクラウド顧客CSVを読み込むと、初回面談→第二面談→ベストプラン申込（申込み）→契約の歩留りを担当者別・年次・月次で分析します。データはこのPC内でのみ処理され、外部送信されません。</div>
 </header>
 
 <div id="dropzone">
@@ -276,7 +276,7 @@ footer { font-size: 11px; color: var(--ink-muted); margin-top: 30px; }
 
   <div class="grid2">
     <section class="card">
-      <h2>仮説② ベストプラン申込率 × 契約率</h2>
+      <h2 id="h2-title">仮説② ベストプラン申込率 × 契約率</h2>
       <div class="desc" id="h2-desc"></div>
       <div id="h2-chart"></div>
       <div class="chart-note" id="h2-note"></div>
@@ -374,26 +374,34 @@ function groupOf(tanto) {
   for (const s of SALES_ORDER) if (t.startsWith(s)) return s;
   return 'その他';
 }
+// 各項目の列名候補（先頭から順に探す）。PGクラウドの新旧エクスポート形式に対応
 const COLS = {
-  name: '名前', tanto: '担当者', shop: '担当店舗',
-  hankyo: '反響(名簿取得日)', shokai: '初回面談日', daini: '第二面談',
-  best: 'ベストプラン申込', keiyaku: '契約',
-  baitai: '販促媒体名', tochi: '土地の有無',
-  yosan: '予算', tsuki: '月々支払予算(万円)', jiko: '自己資金(万円)',
-  mobile: '携帯電話', kotei: '固定電話', addr: '住所',
+  name: ['名前'], tanto: ['担当者'], shop: ['担当店舗'],
+  hankyo: ['反響(名簿取得日)'], shokai: ['初回面談日', '初回面談'], daini: ['第二面談'],
+  best: ['ベストプラン申込', '申込み'], keiyaku: ['契約'],
+  baitai: ['販促媒体名'], tochi: ['土地の有無'],
+  yosan: ['予算'], tsuki: ['月々支払予算(万円)'], jiko: ['自己資金(万円)'],
+  mobile: ['携帯電話'], kotei: ['固定電話'], addr: ['住所'],
 };
 let ALL = [];        // 統合後の全顧客
 let META = { raw: 0, merged: 0, dup: 0, noKeiyakuCol: false };
+let LBL_BEST = 'BP申込';       // 「ベストプラン申込」列がない新形式では「申込み」と表示
+let GROUPS_ACTIVE = [...GROUPS]; // 実際に使う担当者グループ（固定6名が不在なら動的生成）
 
 function loadRows(rows) {
   const header = rows[0];
   const idx = {};
-  for (const [k, name] of Object.entries(COLS)) {
-    idx[k] = header.indexOf(name);
+  for (const [k, names] of Object.entries(COLS)) {
+    idx[k] = -1;
+    for (const name of names) {
+      const i = header.indexOf(name);
+      if (i >= 0) { idx[k] = i; break; }
+    }
     if (idx[k] < 0 && ['name','tanto','shokai','daini','best','keiyaku'].includes(k)) {
-      throw new Error('必須列が見つかりません: ' + name);
+      throw new Error('必須列が見つかりません: ' + names.join(' / '));
     }
   }
+  LBL_BEST = header[idx.best] === '申込み' ? '申込み' : 'BP申込';
   const get = (r, k) => idx[k] >= 0 ? (r[idx[k]] || '').trim() : '';
   const norm = s => s.replace(/[\s　]/g, '');
 
@@ -439,8 +447,27 @@ function loadRows(rows) {
     merged.push(base);
   }
   ALL = merged;
+  // 固定順の6名が1人でもいれば固定順、いなければ担当者を初回面談数の多い順に動的生成
+  const hasFixed = merged.some(c => c.group !== 'その他');
+  if (hasFixed) {
+    GROUPS_ACTIVE = [...SALES_ORDER, 'その他'];
+  } else {
+    const cnt = new Map();
+    for (const c of merged) {
+      const g = (c.tanto === '(未設定)') ? 'その他' : c.tanto;
+      c.group = g;
+      if (!cnt.has(g)) cnt.set(g, { shokai: 0, n: 0 });
+      const e = cnt.get(g);
+      e.n++;
+      if (c.d.shokai) e.shokai++;
+    }
+    GROUPS_ACTIVE = [...cnt.keys()]
+      .filter(g => g !== 'その他')
+      .sort((a, b) => (cnt.get(b).shokai - cnt.get(a).shokai) || (cnt.get(b).n - cnt.get(a).n) || a.localeCompare(b, 'ja'));
+    GROUPS_ACTIVE.push('その他');
+  }
   META = { raw: recs.length, merged: merged.length, dup,
-           noKeiyakuCol: !merged.some(c => c.d.keiyaku) };
+           noKeiyakuCol: !merged.some(c => c.d.keiyaku), fixedOrder: hasFixed };
 }
 
 /* ================= filtering ================= */
@@ -694,12 +721,6 @@ function scatterChart(el, { points, xFmt, yFmt, xTitle, yTitle, height = 300 }) 
 }
 
 /* ================= render ================= */
-const STAGES = [
-  { key: 'shokai', label: '初回面談' },
-  { key: 'daini', label: '第二面談' },
-  { key: 'best', label: 'BP申込' },
-  { key: 'keiyaku', label: '契約' },
-];
 const useKeiyaku = () => !META.noKeiyakuCol;
 
 function renderAll() {
@@ -727,13 +748,13 @@ function renderKPI(cs) {
     { label: jisPeriod ? '顧客数（期間内に動きあり）' : '顧客数（重複統合後）', value: nCust.toLocaleString(), note: `反響${jisPeriod ? '発生' : 'あり'} ${f.hankyo.toLocaleString()}件` },
     { label: '初回面談', value: f.shokai.toLocaleString(), note: `反響→面談 ${fmtPct(pct(f.shokai, f.hankyo))}` },
     { label: '第二面談率', value: fmtPct(pct(f.daini, f.shokai)), note: `${f.daini}件 ÷ 初回${f.shokai}件` },
-    { label: 'BP申込率', value: fmtPct(pct(f.best, f.shokai)), note: `${f.best}件 ÷ 初回${f.shokai}件` },
+    { label: LBL_BEST + '率', value: fmtPct(pct(f.best, f.shokai)), note: `${f.best}件 ÷ 初回${f.shokai}件` },
     useKeiyaku()
       ? { label: '契約率', value: fmtPct(pct(f.keiyaku, f.shokai)), note: `${f.keiyaku}件 ÷ 初回${f.shokai}件` }
       : { label: '契約率', value: 'データなし', na: true, note: '契約列が全件空欄' },
     useKeiyaku()
       ? { label: '初回→契約 中央値', value: median(lt) != null ? median(lt) + '日' : '−', note: `n=${lt.length}` }
-      : { label: '初回→BP申込 中央値', value: median(ltBP) != null ? median(ltBP) + '日' : '−', note: `n=${ltBP.length}（契約データなしのため代替）` },
+      : { label: `初回→${LBL_BEST} 中央値`, value: median(ltBP) != null ? median(ltBP) + '日' : '−', note: `n=${ltBP.length}（契約データなしのため代替）` },
   ];
   document.getElementById('kpi-tiles').innerHTML = tiles.map(t =>
     `<div class="tile"><div class="label">${esc(t.label)}</div><div class="value${t.na ? ' na' : ''}">${esc(t.value)}</div><div class="note">${esc(t.note)}</div></div>`
@@ -743,7 +764,7 @@ function renderKPI(cs) {
 function renderFunnel(cs) {
   const f = funnelCounts(cs);
   const seq = ['hankyo', 'shokai', 'daini', 'best', 'keiyaku'];
-  const names = { hankyo: '反響', shokai: '初回面談', daini: '第二面談', best: 'BP申込', keiyaku: '契約' };
+  const names = { hankyo: '反響', shokai: '初回面談', daini: '第二面談', best: LBL_BEST, keiyaku: '契約' };
   const colors = ['var(--seq-250)', 'var(--seq-400)', 'var(--seq-400)', 'var(--seq-550)', 'var(--seq-700)'];
   const maxv = Math.max(1, f.hankyo);
   let html = '';
@@ -782,13 +803,13 @@ function renderTantoTable(cs) {
     { k: 'apoR', label: '反響→面談率' },
     { k: 'daini', label: '第二面談' },
     { k: 'dainiR', label: '第二面談率' },
-    { k: 'best', label: 'BP申込' },
-    { k: 'bestR', label: 'BP申込率' },
+    { k: 'best', label: LBL_BEST },
+    { k: 'bestR', label: LBL_BEST + '率' },
     { k: 'keiyaku', label: '契約' },
     { k: 'keiR', label: '契約率' },
   ];
   rows.sort((a, b) => {
-    if (sortState.col < 0) return GROUPS.indexOf(a.t) - GROUPS.indexOf(b.t);
+    if (sortState.col < 0) return GROUPS_ACTIVE.indexOf(a.t) - GROUPS_ACTIVE.indexOf(b.t);
     const k = cols[sortState.col].k;
     const av = a[k] == null ? -1 : a[k], bv = b[k] == null ? -1 : b[k];
     if (typeof av === 'string') return sortState.dir * av.localeCompare(bv, 'ja');
@@ -861,7 +882,7 @@ function renderTrends(cs) {
   }
   const rateSeries = [
     { name: '第二面談率', color: 'var(--s1)', data: yData.map(f => pct(f.daini, f.shokai)) },
-    { name: 'BP申込率', color: 'var(--s2)', data: yData.map(f => pct(f.best, f.shokai)) },
+    { name: LBL_BEST + '率', color: 'var(--s2)', data: yData.map(f => pct(f.best, f.shokai)) },
   ];
   if (useKeiyaku()) rateSeries.push({ name: '契約率', color: 'var(--s5)', data: yData.map(f => pct(f.keiyaku, f.shokai)) });
   lineChart(document.getElementById('yearly-chart'), {
@@ -872,7 +893,7 @@ function renderTrends(cs) {
     height: 220,
   });
   document.getElementById('yearly-table').innerHTML =
-    '<thead><tr><th>年</th><th>初回面談</th><th>第二面談</th><th>BP申込</th><th>契約</th></tr></thead><tbody>' +
+    `<thead><tr><th>年</th><th>初回面談</th><th>第二面談</th><th>${LBL_BEST}</th><th>契約</th></tr></thead><tbody>` +
     years.map((y, i) => {
       const f = yData[i];
       return `<tr><td>${y}</td><td class="num">${f.shokai}</td><td class="num">${f.daini} (${fmtPct(pct(f.daini, f.shokai))})</td><td class="num">${f.best} (${fmtPct(pct(f.best, f.shokai))})</td><td class="num">${useKeiyaku() ? f.keiyaku + ' (' + fmtPct(pct(f.keiyaku, f.shokai)) + ')' : '−'}</td></tr>`;
@@ -894,12 +915,12 @@ function renderTrends(cs) {
     labels: mLabels,
     series: [{ name: '初回面談数', color: 'var(--seq-400)', data: mData.map(f => f.shokai) }],
     yFmt: v => String(Math.round(v)),
-    tipFmt: (i) => `${months[i].y}年${months[i].m}月\n初回面談 ${mData[i].shokai}件 / 第二 ${mData[i].daini}件 / BP ${mData[i].best}件` + (useKeiyaku() ? ` / 契約 ${mData[i].keiyaku}件` : ''),
+    tipFmt: (i) => `${months[i].y}年${months[i].m}月\n初回面談 ${mData[i].shokai}件 / 第二 ${mData[i].daini}件 / ${LBL_BEST} ${mData[i].best}件` + (useKeiyaku() ? ` / 契約 ${mData[i].keiyaku}件` : ''),
     height: 180, labelEvery: 2,
   });
   const mRateSeries = [
     { name: '第二面談率', color: 'var(--s1)', data: mData.map(f => pct(f.daini, f.shokai)) },
-    { name: 'BP申込率', color: 'var(--s2)', data: mData.map(f => pct(f.best, f.shokai)) },
+    { name: LBL_BEST + '率', color: 'var(--s2)', data: mData.map(f => pct(f.best, f.shokai)) },
   ];
   if (useKeiyaku()) mRateSeries.push({ name: '契約率', color: 'var(--s5)', data: mData.map(f => pct(f.keiyaku, f.shokai)) });
   lineChart(document.getElementById('monthly-rate-chart'), {
@@ -919,7 +940,7 @@ function tantoStats(cs, minShokai) {
     by.get(c.group).push(c);
   }
   const out = [];
-  for (const t of GROUPS) {
+  for (const t of GROUPS_ACTIVE) {
     if (!by.has(t)) continue;
     const g = by.get(t);
     const f = funnelCounts(g);
@@ -944,21 +965,21 @@ function renderH1(cs) {
   const useK = useKeiyaku();
   document.getElementById('h1-desc').textContent = useK
     ? '担当者別に、初回面談→契約のリードタイム中央値（横軸）と契約率（縦軸）をプロット。左上にいるほど「早く決めて高率」。'
-    : '契約データが空のため代替表示：初回面談→ベストプラン申込のリードタイム中央値（横軸）とBP申込率（縦軸）。契約込みのCSVを読み込むと本来の検証（リードタイム×契約率）に切り替わります。';
+    : `契約データが空のため代替表示：初回面談→${LBL_BEST}のリードタイム中央値（横軸）と${LBL_BEST}率（縦軸）。契約込みのCSVを読み込むと本来の検証（リードタイム×契約率）に切り替わります。`;
   const pts = stats
     .filter(s => useK ? (s.ltK != null && s.nLtK >= 3) : (s.ltB != null && s.nLtB >= 3))
     .map(s => ({
       x: useK ? s.ltK : s.ltB,
       y: useK ? s.keiR : s.bestR,
       label: shortName(s.t),
-      tip: `${s.t}\nリードタイム中央値 ${(useK ? s.ltK : s.ltB)}日（n=${useK ? s.nLtK : s.nLtB}）\n${useK ? '契約率' : 'BP申込率'} ${fmtPct(useK ? s.keiR : s.bestR)}（初回${s.f.shokai}件）`,
+      tip: `${s.t}\nリードタイム中央値 ${(useK ? s.ltK : s.ltB)}日（n=${useK ? s.nLtK : s.nLtB}）\n${useK ? '契約率' : LBL_BEST + '率'} ${fmtPct(useK ? s.keiR : s.bestR)}（初回${s.f.shokai}件）`,
     }));
   scatterChart(document.getElementById('h1-chart'), {
     points: pts,
     xFmt: v => Math.round(v) + '日',
     yFmt: v => v.toFixed(0) + '%',
-    xTitle: useK ? '初回面談→契約 リードタイム中央値（日）' : '初回面談→BP申込 リードタイム中央値（日）',
-    yTitle: useK ? '契約率（契約÷初回面談）' : 'BP申込率（BP÷初回面談）',
+    xTitle: useK ? '初回面談→契約 リードタイム中央値（日）' : `初回面談→${LBL_BEST} リードタイム中央値（日）`,
+    yTitle: useK ? '契約率（契約÷初回面談）' : `${LBL_BEST}率（${LBL_BEST}÷初回面談）`,
   });
   document.getElementById('h1-note').textContent =
     `対象: 初回面談10件以上かつ到達3件以上の担当者 ${pts.length}名。各点にマウスを乗せると詳細表示。`;
@@ -967,29 +988,30 @@ function renderH1(cs) {
 function renderH2(cs) {
   const stats = tantoStats(cs, 10);
   const useK = useKeiyaku();
+  document.getElementById('h2-title').textContent = `仮説② ${LBL_BEST === '申込み' ? '申込み' : 'ベストプラン申込'}率 × 契約率`;
   const el = document.getElementById('h2-chart');
   if (useK) {
-    document.getElementById('h2-desc').textContent = '担当者別に、BP申込率（横軸）と契約率（縦軸）をプロット。右上への並びが見えれば仮説②を支持。';
+    document.getElementById('h2-desc').textContent = `担当者別に、${LBL_BEST}率（横軸）と契約率（縦軸）をプロット。右上への並びが見えれば仮説②を支持。`;
     const pts = stats.filter(s => s.bestR != null).map(s => ({
       x: s.bestR, y: s.keiR || 0, label: shortName(s.t),
-      tip: `${s.t}\nBP申込率 ${fmtPct(s.bestR)} / 契約率 ${fmtPct(s.keiR)}\n初回面談 ${s.f.shokai}件`,
+      tip: `${s.t}\n${LBL_BEST}率 ${fmtPct(s.bestR)} / 契約率 ${fmtPct(s.keiR)}\n初回面談 ${s.f.shokai}件`,
     }));
     scatterChart(el, {
       points: pts,
       xFmt: v => v.toFixed(0) + '%', yFmt: v => v.toFixed(0) + '%',
-      xTitle: 'BP申込率', yTitle: '契約率',
+      xTitle: LBL_BEST + '率', yTitle: '契約率',
     });
     document.getElementById('h2-note').textContent = `対象: 初回面談10件以上の担当者 ${pts.length}名。`;
   } else {
-    document.getElementById('h2-desc').textContent = '契約データが空のため、現時点では検証不可。代替として第二面談率（横軸）とBP申込率（縦軸）の関係を表示します。BPまで進める力と面談を深める力の相関の目安になります。';
+    document.getElementById('h2-desc').textContent = `契約データが空のため、現時点では検証不可。代替として第二面談率（横軸）と${LBL_BEST}率（縦軸）の関係を表示します。${LBL_BEST}まで進める力と面談を深める力の相関の目安になります。`;
     const pts = stats.filter(s => s.dainiR != null).map(s => ({
       x: s.dainiR, y: s.bestR || 0, label: shortName(s.t),
-      tip: `${s.t}\n第二面談率 ${fmtPct(s.dainiR)} / BP申込率 ${fmtPct(s.bestR)}\n初回面談 ${s.f.shokai}件`,
+      tip: `${s.t}\n第二面談率 ${fmtPct(s.dainiR)} / ${LBL_BEST}率 ${fmtPct(s.bestR)}\n初回面談 ${s.f.shokai}件`,
     }));
     scatterChart(el, {
       points: pts,
       xFmt: v => v.toFixed(0) + '%', yFmt: v => v.toFixed(0) + '%',
-      xTitle: '第二面談率', yTitle: 'BP申込率',
+      xTitle: '第二面談率', yTitle: LBL_BEST + '率',
     });
     document.getElementById('h2-note').textContent = `対象: 初回面談10件以上の担当者 ${pts.length}名。契約込みCSVで本来の検証に切り替わります。`;
   }
@@ -1006,7 +1028,7 @@ function renderH3(cs) {
     height: 200,
   });
   document.getElementById('h3-table').innerHTML =
-    `<thead><tr><th>担当者</th><th>予約系反響</th><th>面談未実施</th><th>未実施率</th><th>${useK ? '契約率' : 'BP申込率(参考)'}</th></tr></thead><tbody>` +
+    `<thead><tr><th>担当者</th><th>予約系反響</th><th>面談未実施</th><th>未実施率</th><th>${useK ? '契約率' : LBL_BEST + '率(参考)'}</th></tr></thead><tbody>` +
     stats.map(s =>
       `<tr><td>${esc(s.t)}</td><td class="num">${s.yoN}</td><td class="num">${s.yoMissN}</td><td class="num">${fmtPct(s.yoMissR)}</td><td class="num">${fmtPct(useK ? s.keiR : s.bestR)}</td></tr>`
     ).join('') + '</tbody>';
@@ -1021,7 +1043,7 @@ function renderTochi(cs) {
   const metrics = [
     { label: '反響→面談率', get: f => pct(f.shokai, f.hankyo) },
     { label: '第二面談率', get: f => pct(f.daini, f.shokai) },
-    { label: 'BP申込率', get: f => pct(f.best, f.shokai) },
+    { label: LBL_BEST + '率', get: f => pct(f.best, f.shokai) },
   ];
   if (useKeiyaku()) metrics.push({ label: '契約率', get: f => pct(f.keiyaku, f.shokai) });
   columnChart(document.getElementById('tochi-chart'), {
@@ -1035,7 +1057,7 @@ function renderTochi(cs) {
     height: 220,
   });
   document.getElementById('tochi-table').innerHTML =
-    `<thead><tr><th></th><th>顧客数</th><th>反響</th><th>初回面談</th><th>第二面談</th><th>BP申込</th><th>契約</th></tr></thead><tbody>` +
+    `<thead><tr><th></th><th>顧客数</th><th>反響</th><th>初回面談</th><th>第二面談</th><th>${LBL_BEST}</th><th>契約</th></tr></thead><tbody>` +
     groups.map((g, gi) => {
       const f = fs[gi];
       return `<tr><td>${g.label}</td><td class="num">${g.cs.length}</td><td class="num">${f.hankyo}</td><td class="num">${f.shokai}</td><td class="num">${f.daini} (${fmtPct(pct(f.daini, f.shokai))})</td><td class="num">${f.best} (${fmtPct(pct(f.best, f.shokai))})</td><td class="num">${useKeiyaku() ? f.keiyaku + ' (' + fmtPct(pct(f.keiyaku, f.shokai)) + ')' : '−'}</td></tr>`;
@@ -1066,7 +1088,7 @@ function renderMoney(cs) {
   });
   const series = [
     { name: '第二面談率', color: 'var(--s1)', data: rows.map(r => pct(r.f.daini, r.f.shokai)) },
-    { name: 'BP申込率', color: 'var(--s2)', data: rows.map(r => pct(r.f.best, r.f.shokai)) },
+    { name: LBL_BEST + '率', color: 'var(--s2)', data: rows.map(r => pct(r.f.best, r.f.shokai)) },
   ];
   if (useKeiyaku()) series.push({ name: '契約率', color: 'var(--s5)', data: rows.map(r => pct(r.f.keiyaku, r.f.shokai)) });
   columnChart(document.getElementById('money-chart'), {
@@ -1077,7 +1099,7 @@ function renderMoney(cs) {
     height: 220,
   });
   document.getElementById('money-table').innerHTML =
-    `<thead><tr><th>${def.title}帯</th><th>初回面談</th><th>第二面談率</th><th>BP申込率</th><th>契約率</th></tr></thead><tbody>` +
+    `<thead><tr><th>${def.title}帯</th><th>初回面談</th><th>第二面談率</th><th>${LBL_BEST}率</th><th>契約率</th></tr></thead><tbody>` +
     rows.map(r =>
       `<tr><td>${esc(r.label)}</td><td class="num">${r.f.shokai}</td><td class="num">${fmtPct(pct(r.f.daini, r.f.shokai))}</td><td class="num">${fmtPct(pct(r.f.best, r.f.shokai))}</td><td class="num">${useKeiyaku() ? fmtPct(pct(r.f.keiyaku, r.f.shokai)) : '−'}</td></tr>`
     ).join('') + '</tbody>';
@@ -1086,9 +1108,12 @@ function renderMoney(cs) {
 function renderDefs(cs) {
   const f = currentFilter();
   document.getElementById('defs').innerHTML = `
-    <dt>担当者の表示</dt><dd>袴田→平野→森→糸繰→三村→平澤の固定順。それ以外の担当者（未設定・管理者アカウント含む）はすべて「その他」に集約。</dd>
+    <dt>担当者の表示</dt><dd>${META.fixedOrder
+      ? '袴田→平野→森→糸繰→三村→平澤の固定順。それ以外の担当者（未設定・管理者アカウント含む）はすべて「その他」に集約。'
+      : '固定順の営業6名（袴田・平野・森・糸繰・三村・平澤）がこのCSVに存在しないため、担当者を初回面談数の多い順に表示しています。'}</dd>
+    <dt>読み込んだCSVの形式</dt><dd>${LBL_BEST === '申込み' ? '新形式（「ベストプラン申込」列がなく「申込み」列を使用）' : '従来形式（「ベストプラン申込」列を使用）'}。列は名前で自動判別するため新旧どちらの形式も読み込めます。</dd>
     <dt>重複統合</dt><dd>名前（空白除去）＋電話番号（携帯優先、なければ住所）が一致する行を同一顧客として統合。日付は各ステージで最も早い日を採用。今回: ${META.raw.toLocaleString()}行 → ${META.merged.toLocaleString()}人（${META.dup}件統合）。</dd>
-    <dt>歩留り率の分母</dt><dd>第二面談率・BP申込率・契約率はすべて「÷ 初回面談数」。反響→面談率のみ「÷ 反響数」。</dd>
+    <dt>歩留り率の分母</dt><dd>第二面談率・${LBL_BEST}率・契約率はすべて「÷ 初回面談数」。反響→面談率のみ「÷ 反響数」。</dd>
     <dt>集計基準（2つのモード）</dt><dd><b>実績基準</b>＝選択期間内に日付が発生した件数を各ステージで数える（例: 2026年の契約数＝契約日が2026年の件数。前年に面談した顧客の契約も含む）。契約実績の検証向き。率は同期間の件数比で顧客の対応関係はない参考値のため、100%を超えることもある。<b>コホート基準</b>＝期間内に初回面談した顧客がその後どこまで進んだかを追跡する真の歩留り。営業力の比較向き。期間を「全期間」にすると両者は一致する。</dd>
     <dt>期間フィルタ</dt><dd>実績基準では各ステージ日付の年で判定。コホート基準では初回面談日（無い顧客は反響日）の年で顧客を絞り込み。</dd>
     ${META.noKeiyakuCol ? '<dt style="color:var(--critical)">契約データ</dt><dd>読み込んだCSVは契約列が全件空欄です（ステータス「見込み」のみの抽出のため、契約済顧客が含まれていない可能性が高い）。PGクラウドで<b>全ステータス（契約済・OB含む）</b>を対象にエクスポートし直すと、契約率・仮説①②が本来の形で表示されます。</dd>' : ''}
@@ -1107,7 +1132,7 @@ function initFilters() {
   document.getElementById('f-period').innerHTML =
     '<option value="">全期間</option>' + ys.map(y => `<option value="${y}">${y}年</option>`).join('');
   const present = new Set(ALL.map(c => c.group));
-  const ts = GROUPS.filter(g => present.has(g));
+  const ts = GROUPS_ACTIVE.filter(g => present.has(g));
   document.getElementById('f-tanto').innerHTML =
     '<option value="">全員</option>' + ts.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
   ['f-period', 'f-tanto', 'f-tochi', 'f-mode'].forEach(id =>
@@ -1118,7 +1143,7 @@ function showBanners() {
   const b = document.getElementById('banners');
   let html = '';
   if (META.noKeiyakuCol) {
-    html += `<div class="banner">⚠ <b>このCSVには契約日データが1件もありません。</b>ステータス「見込み」のみの抽出になっている可能性があります。契約率・リードタイム分析（仮説①②）を行うには、PGクラウドで<b>契約済・OB等を含む全ステータス</b>でCSVをエクスポートし直して読み込んでください。それまでの間はBP申込率を代替指標として表示します。</div>`;
+    html += `<div class="banner">⚠ <b>このCSVには契約日データが1件もありません。</b>ステータス「見込み」のみの抽出になっている可能性があります。契約率・リードタイム分析（仮説①②）を行うには、PGクラウドで<b>契約済・OB等を含む全ステータス</b>でCSVをエクスポートし直して読み込んでください。それまでの間は${LBL_BEST}率を代替指標として表示します。</div>`;
   }
   if (META.dup > 0) {
     html += `<div class="banner info">重複顧客 ${META.dup}件を統合しました（${META.raw.toLocaleString()}行 → ${META.merged.toLocaleString()}人）。統合ルールは最下部「集計定義」を参照。</div>`;
