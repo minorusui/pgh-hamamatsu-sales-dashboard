@@ -273,12 +273,14 @@ footer { font-size: 11px; color: var(--ink-muted); margin-top: 30px; }
       <div class="desc" id="h1-desc"></div>
       <div id="h1-chart"></div>
       <div class="chart-note" id="h1-note"></div>
+      <div class="scrollx" style="margin-top:12px"><table class="data" id="h1-table"></table></div>
     </section>
     <section class="card">
       <h2 id="h2-title">仮説② ベストプラン申込率 × 契約率</h2>
       <div class="desc" id="h2-desc"></div>
       <div id="h2-chart"></div>
       <div class="chart-note" id="h2-note"></div>
+      <div class="scrollx" style="margin-top:12px"><table class="data" id="h2-table"></table></div>
     </section>
   </div>
 
@@ -985,6 +987,18 @@ function renderH1(cs) {
   });
   document.getElementById('h1-note').textContent =
     `対象: 初回面談10件以上かつ到達3件以上の担当者 ${pts.length}名。各点にマウスを乗せると詳細表示。`;
+  // 担当者別数値テーブル（散布図の対象外もグレーで表示）
+  const allStats = tantoStats(cs, 1);
+  const goalLbl = useK ? '契約' : LBL_BEST;
+  document.getElementById('h1-table').innerHTML =
+    `<thead><tr><th>担当者</th><th>初回面談</th><th>${goalLbl}</th><th>${goalLbl}率</th><th>初回→${goalLbl} 中央値</th><th>n</th></tr></thead><tbody>` +
+    allStats.map(s => {
+      const lt = useK ? s.ltK : s.ltB, n = useK ? s.nLtK : s.nLtB;
+      const rate = useK ? s.keiR : s.bestR;
+      const goal = useK ? s.f.keiyaku : s.f.best;
+      const dim = (s.f.shokai < 10 || n < 3) ? ' style="color:var(--ink-muted)"' : '';
+      return `<tr${dim}><td>${esc(s.t)}</td><td class="num">${s.f.shokai}</td><td class="num">${goal}</td><td class="num">${fmtPct(rate)}</td><td class="num">${lt != null ? lt + '日' : '−'}</td><td class="num">${n}</td></tr>`;
+    }).join('') + '</tbody>';
 }
 
 function renderH2(cs) {
@@ -1004,6 +1018,7 @@ function renderH2(cs) {
       xTitle: LBL_BEST + '率', yTitle: '契約率',
     });
     document.getElementById('h2-note').textContent = `対象: 初回面談10件以上の担当者 ${pts.length}名。`;
+    renderH2Table(cs, true);
   } else {
     document.getElementById('h2-desc').textContent = `契約データが空のため、現時点では検証不可。代替として第二面談率（横軸）と${LBL_BEST}率（縦軸）の関係を表示します。${LBL_BEST}まで進める力と面談を深める力の相関の目安になります。`;
     const pts = stats.filter(s => s.dainiR != null).map(s => ({
@@ -1016,7 +1031,24 @@ function renderH2(cs) {
       xTitle: '第二面談率', yTitle: LBL_BEST + '率',
     });
     document.getElementById('h2-note').textContent = `対象: 初回面談10件以上の担当者 ${pts.length}名。契約込みCSVで本来の検証に切り替わります。`;
+    renderH2Table(cs, false);
   }
+}
+// 仮説②の担当者別数値テーブル。useK=trueは BP×契約、falseは 第二面談×BP の代替表示
+function renderH2Table(cs, useK) {
+  const allStats = tantoStats(cs, 1);
+  const head = useK
+    ? `<th>担当者</th><th>初回面談</th><th>${LBL_BEST}</th><th>${LBL_BEST}率</th><th>契約</th><th>契約率</th>`
+    : `<th>担当者</th><th>初回面談</th><th>第二面談</th><th>第二面談率</th><th>${LBL_BEST}</th><th>${LBL_BEST}率</th>`;
+  document.getElementById('h2-table').innerHTML =
+    `<thead><tr>${head}</tr></thead><tbody>` +
+    allStats.map(s => {
+      const dim = s.f.shokai < 10 ? ' style="color:var(--ink-muted)"' : '';
+      const cells = useK
+        ? `<td class="num">${s.f.best}</td><td class="num">${fmtPct(s.bestR)}</td><td class="num">${s.f.keiyaku}</td><td class="num">${fmtPct(s.keiR)}</td>`
+        : `<td class="num">${s.f.daini}</td><td class="num">${fmtPct(s.dainiR)}</td><td class="num">${s.f.best}</td><td class="num">${fmtPct(s.bestR)}</td>`;
+      return `<tr${dim}><td>${esc(s.t)}</td><td class="num">${s.f.shokai}</td>${cells}</tr>`;
+    }).join('') + '</tbody>';
 }
 
 function renderH3(cs) {
